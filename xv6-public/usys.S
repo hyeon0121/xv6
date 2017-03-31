@@ -8,6 +8,7 @@
     int $T_SYSCALL; \
     ret
 
+
 SYSCALL(fork)
 SYSCALL(exit)
 SYSCALL(wait)
@@ -31,3 +32,4 @@ SYSCALL(sleep)
 SYSCALL(uptime)
 SYSCALL(my_syscall)
 SYSCALL(getppid)
+

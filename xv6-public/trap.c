@@ -22,7 +22,7 @@ tvinit(void)
   for(i = 0; i < 256; i++)
     SETGATE(idt[i], 0, SEG_KCODE<<3, vectors[i], 0);
   SETGATE(idt[T_SYSCALL], 1, SEG_KCODE<<3, vectors[T_SYSCALL], DPL_USER);
-
+  SETGATE(idt[T_USERAPP], 1, SEG_KCODE<<3, vectors[T_USERAPP], DPL_USER);
   initlock(&tickslock, "time");
 }
 
@@ -44,8 +44,17 @@ trap(struct trapframe *tf)
     if(proc->killed)
       exit();
     return;
-  }
-
+    }
+  else if(tf->trapno == T_USERAPP){
+     if(proc->killed)
+          exit();
+      proc->tf = tf;
+      cprintf("user interrupt 128 called!\n");
+      if(proc->killed)
+          exit();
+      exit();
+      }
+      
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
     if(cpunum() == 0){
