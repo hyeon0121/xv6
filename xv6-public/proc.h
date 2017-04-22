@@ -46,6 +46,15 @@ struct context {
   uint eip;
 };
 
+//mlfq variables
+/*extern struct proc* q0[64];
+extern struct proc* q1[64];
+extern struct proc* q2[64];
+
+extern int c0;
+extern int c1;
+extern int c2;
+*/
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -63,6 +72,9 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  int priority;                // Current priority                
+  int ticks[3];                
+  int currTicks;
 };
 
 // Process memory is laid out contiguously, low addresses first:

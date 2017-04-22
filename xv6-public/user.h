@@ -25,6 +25,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int my_syscall(char*);
+int getlev(void);
 // ulib.c
 int stat(char*, struct stat*);
 char* strcpy(char*, char*);

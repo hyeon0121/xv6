@@ -100,6 +100,7 @@ argint(int n, int *ip)
 	extern int sys_write(void);
 	extern int sys_uptime(void);
     extern int sys_yield(void);
+    extern int sys_getlev(void);
 
 	static int (*syscalls[])(void) = {
 	[SYS_fork]    sys_fork,
@@ -124,7 +125,8 @@ argint(int n, int *ip)
 	[SYS_mkdir]   sys_mkdir,
 	[SYS_close]   sys_close,
     [SYS_yield]   sys_yield,
-	};
+	[SYS_getlev]  sys_getlev,
+    };
 	
 
 

@@ -94,9 +94,14 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+int
+sys_getlev(void)
+{
+    return proc->priority;
+}
 int 
 sys_yield(void)
 {
     yield();
     return 0;
-    }
+}
