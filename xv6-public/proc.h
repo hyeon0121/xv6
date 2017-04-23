@@ -77,6 +77,8 @@ struct proc {
   int ticket;
   int pass;
   int stride;
+  int limitpass;
+  int isMLFQ;
 };
 
 // Process memory is laid out contiguously, low addresses first:

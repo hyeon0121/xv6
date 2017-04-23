@@ -278,32 +278,31 @@ scheduler(void)
 		for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
 			
 			if(p->state != RUNNABLE)
-                 continue;
+                continue;
 			if(p->priority == prio) {
-				proc = p;
-					
-          	    switchuvm(p);
-          	   	p->state = RUNNING;
-      	       	swtch(&cpu->scheduler, proc->context);
-      	       	switchkvm();
-                 
-				if(count >= 100) { 
+                proc = p;
+                switchuvm(p);
+                p->state = RUNNING;
+                swtch(&cpu->scheduler, proc->context);
+                switchkvm();
+                
+                if(count >= 100) { 
 					if(p->priority !=0){
-                       p->priority = 0;
-                       p->currTicks = 0;
-                    }
+                        p->priority = 0;
+                        p->currTicks = 0;
+                        }
                     count = 0;
-		        }	
+                    }	
 
 				if(p->currTicks >= limit[prio]) {
 					if(p->priority <2) {
 						p->priority++;
 					}
-		            p->currTicks = 0;
+                    p->currTicks = 0;
 				}
-			proc = 0;
+                proc = 0;
             }				
-		}
+        }
 	}
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it

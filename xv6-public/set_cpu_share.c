@@ -8,6 +8,7 @@ set_cpu_share(int x){
     proc->ticket = x;
     proc->pass = 0;
     proc->count -= x;
+    proc->isMLFQ = 1;
     if(proc->count < 20){
             printf(1,"MLFQ at least 20 cpu shar!!\n");
             return -1;
@@ -17,6 +18,9 @@ set_cpu_share(int x){
             return -1;
     }
     proc->stride = 10000/p->ticket;
+    proc->pass += stride;
+    proc->limitpass += pass;
+
     return 0;
 }
 int 
