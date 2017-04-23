@@ -99,6 +99,12 @@ sys_getlev(void)
 {
     return proc->priority;
 }
+/*int
+sys_set_cpu_share(void)
+{
+    proc->
+    return 0;
+}*/
 int 
 sys_yield(void)
 {

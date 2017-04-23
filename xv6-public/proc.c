@@ -20,9 +20,9 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
-
-
-
+//struct proc *ssp;
+//int Largenum = 10000;
+int count = 0;
 void
 pinit(void)
 {
@@ -51,11 +51,6 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->priority = 0;
-  int i;
-  for (i=0; i<3; i++)
-  {
-    p->ticks[i] = 0;
-  }
   p->currTicks = 0;
   
   release(&ptable.lock);
@@ -165,10 +160,11 @@ fork(void)
     if(proc->ofile[i])
       np->ofile[i] = filedup(proc->ofile[i]);
   np->cwd = idup(proc->cwd);
- 
-  pid = np->pid;
-  np->state = RUNNABLE;
   safestrcpy(np->name, proc->name, sizeof(proc->name));
+  pid = np->pid;
+  acquire(&ptable.lock);
+  np->state = RUNNABLE;
+  release(&ptable.lock);
   return pid;
 }
 
@@ -270,7 +266,7 @@ scheduler(void)
 {
   struct proc *p;
 	int limit[] = {5,10,20};
-	int count = 0;
+
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -284,63 +280,34 @@ scheduler(void)
 			if(p->state != RUNNABLE)
                  continue;
 			if(p->priority == prio) {
-				
-
 				proc = p;
-				int j;
-               
-				for(j = p->currTicks; j <limit[prio]; j++) {
-						
-          	    	switchuvm(p);
-          	    	p->state = RUNNING;
-      	        	swtch(&cpu->scheduler, proc->context);
-      	        	switchkvm();
-				
-					p->ticks[prio]++;
-                    p->currTicks ++;
-                   
-				
-					count ++;
-
-           
 					
-					if(count == 100) {
-                    //    cprintf("boo");
-						p->priority = 0;
-                        p->currTicks = 0;
-                        count = 0;
-                            
-					}
-					if(p->state != RUNNABLE) {
+          	    switchuvm(p);
+          	   	p->state = RUNNING;
+      	       	swtch(&cpu->scheduler, proc->context);
+      	       	switchkvm();
+                 
+				if(count >= 100) { 
+					if(p->priority !=0){
+                       p->priority = 0;
+                       p->currTicks = 0;
+                    }
+                    count = 0;
+		        }	
 
-						break;
+				if(p->currTicks >= limit[prio]) {
+					if(p->priority <2) {
+						p->priority++;
 					}
+		            p->currTicks = 0;
 				}
-              
-
-				if(j == limit[prio]) {
-						if(p->priority <2) {
-							p->priority++;
-						}
-			         p->currTicks = 0;
-				}
-			
-            }
-				proc = 0;
+			proc = 0;
+            }				
 		}
-       /* for(int k =0;k<3;k++){
-            cprintf("tck = %d\n",p->ticks[k]);
-            }*/
-			
-	}	
-    
-			
-
+	}
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      
-
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       
