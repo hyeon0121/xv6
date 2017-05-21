@@ -488,45 +488,58 @@ procdump(void)
 int
 thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 {
-    /*void *stack = malloc((uint)PGSIZE*2);
-    if((uint)stack <= 0){
-        return -1;
-    }
-    if((uint)stack%PGSIZE){
-        stack += 4096 - ((uint)stack % PGSIZE);
-    }*/
-     
     int i;
     struct proc *np;
-    void* stack[PGSIZE]; 
+  
+    uint  sp, ustack[3+MAXARG+1];
+ 
+    // Allocate process.
     if((np = allocproc()) == 0){
+        cprintf("Cannot allocate!\n");
         return -1;
     }
-    
-    // Threads use the same pagetable
-    np->sz = proc->sz;
-    
-    if(proc->isthread == 0){
-        np->parent = proc;
-    }
-    else{
-        np->parent = proc->parent;
-    }
-    *np->tf = *proc->tf;
-    
 
-    //correctly set parent to the base process
-   
-    np->tf->eax = 0;
+    *thread = np->pid;
     np->pgdir = proc->pgdir;
-    np->tf->eip = (int)start_routine;
+    np->sz = proc->sz;
+    np->parent = proc;
     np->isthread = 1;
-    np->stack = (int)stack;
-    np->tf->esp = (int)stack + 4092;
-    *((int*)(np->tf->esp)) = (int)arg;
-    *((int*)(np->tf->esp-4)) = 0xFFFFFFFF;
-    np->tf->esp -= 4;
-   
+    *np->tf = *proc->tf;
+
+    // Clear %eax so that fork returns 0 in success.
+    np->tf->eax = 0;
+    np->tf->eip = (uint)start_routine;   
+
+    // Allocate two pages at the next page boundary.
+    // Make the first inaccessible.  Use the second as the user stack.
+
+    if((np->sz = allocuvm(np->pgdir, np->sz, np->sz + 2*PGSIZE)) == 0){
+        return -1;
+    }
+    proc->sz = np->sz;
+    clearpteu(np->pgdir, (char*)(np->sz - 2*PGSIZE));
+    sp = np->sz;
+
+    sp = (sp - (sizeof(arg)));
+    if(copyout(np->pgdir,sp,arg,sizeof(arg))<0){
+        return -1;
+    }
+
+    // Push argument strings, prepare rest of stack in ustack.
+    ustack[3] = sp;
+    ustack[4] = 0;
+    ustack[0] = 0xffffffff;  // fake return PC
+    ustack[1] = 1;
+    ustack[2] = sp - (1+1)*4;
+
+
+
+    sp -= (3+1+1) * 4;
+    if(copyout(np->pgdir, sp, ustack, (3+1+1)*4) < 0){
+        np->state = ZOMBIE;
+        return -1;
+    }
+
     for(i=0;i<NOFILE;i++)
         if(proc->ofile[i])
             np->ofile[i] = filedup(proc->ofile[i]);
@@ -534,19 +547,9 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
 
     safestrcpy(np->name, proc->name, sizeof(proc->name));
 
-    //copy stack
+    np->tf->esp = sp;
+   
     acquire(&ptable.lock);
-    /*stacksize = (uint)proc->tf->esp + (PGSIZE - ((uint)proc->tf->esp % PGSIZE));
-    stacksize = stacksize - (uint)proc->tf->esp;
-    np->tf->esp = (uint)stack + PGSIZE - stacksize;
-    np->tf->ebp = np->tf->esp + (proc->tf->ebp - proc->tf->esp);
-    if(copyout(np->pgdir,np->tf->esp,(void*)proc->tf->esp,stacksize)<0){
-        cprintf("stack copy fail\n");
-        return -1;
-    }
-
-    pid = np->pid;
-    */
     np->state = RUNNABLE;
     release(&ptable.lock);
    
