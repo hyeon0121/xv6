@@ -111,3 +111,27 @@ sys_yield(void)
     yield();
     return 0;
 }
+/*int
+sys_thread_create(void)
+{
+}*/
+int
+sys_thread_exit(void)
+{
+    void *retval;
+    if(argptr(0,(void*)&retval,sizeof(retval)) < 0)
+        return -1;
+    thread_exit(retval);
+    return 0;
+}
+int 
+sys_thread_join(void)
+{
+    thread_t thread;
+    void** retval;
+
+    if(argint(0, &thread) < 0)
+        return -1;
+    thread_join(thread,retval);
+    return 0;
+}

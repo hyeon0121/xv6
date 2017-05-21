@@ -1,13 +1,13 @@
 #include "types.h"
+#include "stat.h"
 #include "defs.h"
 #include "param.h"
 #include "mmu.h"
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
-//#include "pstat.h"
 
-
+typedef unsigned int thread_t;
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -485,5 +485,144 @@ procdump(void)
     cprintf("\n");
   }
 }
+int
+thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
+{
+    /*void *stack = malloc((uint)PGSIZE*2);
+    if((uint)stack <= 0){
+        return -1;
+    }
+    if((uint)stack%PGSIZE){
+        stack += 4096 - ((uint)stack % PGSIZE);
+    }*/
+     
+    int i;
+    struct proc *np;
+    void* stack[PGSIZE]; 
+    if((np = allocproc()) == 0){
+        return -1;
+    }
+    
+    // Threads use the same pagetable
+    np->sz = proc->sz;
+    
+    if(proc->isthread == 0){
+        np->parent = proc;
+    }
+    else{
+        np->parent = proc->parent;
+    }
+    *np->tf = *proc->tf;
+    
 
+    //correctly set parent to the base process
+   
+    np->tf->eax = 0;
+    np->pgdir = proc->pgdir;
+    np->tf->eip = (int)start_routine;
+    np->isthread = 1;
+    np->stack = (int)stack;
+    np->tf->esp = (int)stack + 4092;
+    *((int*)(np->tf->esp)) = (int)arg;
+    *((int*)(np->tf->esp-4)) = 0xFFFFFFFF;
+    np->tf->esp -= 4;
+   
+    for(i=0;i<NOFILE;i++)
+        if(proc->ofile[i])
+            np->ofile[i] = filedup(proc->ofile[i]);
+    np->cwd = idup(proc->cwd);
 
+    safestrcpy(np->name, proc->name, sizeof(proc->name));
+
+    //copy stack
+    acquire(&ptable.lock);
+    /*stacksize = (uint)proc->tf->esp + (PGSIZE - ((uint)proc->tf->esp % PGSIZE));
+    stacksize = stacksize - (uint)proc->tf->esp;
+    np->tf->esp = (uint)stack + PGSIZE - stacksize;
+    np->tf->ebp = np->tf->esp + (proc->tf->ebp - proc->tf->esp);
+    if(copyout(np->pgdir,np->tf->esp,(void*)proc->tf->esp,stacksize)<0){
+        cprintf("stack copy fail\n");
+        return -1;
+    }
+
+    pid = np->pid;
+    */
+    np->state = RUNNABLE;
+    release(&ptable.lock);
+   
+    return 0;
+}
+void
+thread_exit(void *retval)
+{
+    struct proc* p;
+    int fd;
+
+    if(proc == initproc)
+        panic("init exiting");
+    for(fd=0;fd < NOFILE; fd++){
+        if(proc->ofile[fd]){
+            fileclose(proc->ofile[fd]);
+            proc->ofile[fd] = 0;
+        }
+    }
+
+    begin_op();
+    iput(proc->cwd);
+    end_op();
+    proc->cwd = 0;
+
+    acquire(&ptable.lock);
+    wakeup1(proc->parent);
+
+    for(p = ptable.proc; p < &ptable.proc[NPROC];p++){
+        if(p->parent == proc){
+            p->parent = initproc;
+            if(p->isthread == 1){
+                p->state = UNUSED;
+                kfree(p->kstack);
+                p->kstack = 0;
+            }
+            if(p->state == ZOMBIE)
+                wakeup1(initproc);
+        }
+    }
+    proc->state = ZOMBIE;
+    sched();
+    panic("zombie exit");
+}
+int
+thread_join(thread_t thread, void **retval)
+{
+    struct proc *p;
+    int havekids, pid;
+
+    acquire(&ptable.lock);
+    for(;;){
+        havekids = 0;
+        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+            if(p->parent != proc || p->isthread != 1)
+                continue;
+            havekids = 1;
+            if(p->state == ZOMBIE){
+                pid = p->pid;
+                kfree(p->kstack);
+                p->kstack = 0;
+                p->state = UNUSED;
+                p->pid = 0;
+                p->parent = 0;
+                p->name[0] = 0;
+                p->killed = 0;
+                release(&ptable.lock);
+                return pid;
+            }
+        }
+
+        if(!havekids || proc->killed){
+            release(&ptable.lock);
+            return -1;
+        }
+        sleep(proc, &ptable.lock);
+        *(int*)retval = proc->stack;
+    }
+}

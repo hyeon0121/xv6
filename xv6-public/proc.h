@@ -79,6 +79,8 @@ struct proc {
   int stride;
   int limitpass;
   int isMLFQ;
+  int isthread;
+  int stack;
 };
 
 // Process memory is laid out contiguously, low addresses first:
