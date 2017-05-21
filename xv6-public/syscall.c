@@ -101,7 +101,10 @@ argint(int n, int *ip)
 	extern int sys_uptime(void);
     extern int sys_yield(void);
     extern int sys_getlev(void);
-  //  extern int sys_set_cpu_share(void);
+    extern int sys_thread_create(void);
+    extern int sys_thread_exit(void);
+    extern int sys_thread_join(void);
+  //extern int sys_set_cpu_share(void);
 
 	static int (*syscalls[])(void) = {
 	[SYS_fork]    sys_fork,
@@ -127,6 +130,9 @@ argint(int n, int *ip)
 	[SYS_close]   sys_close,
     [SYS_yield]   sys_yield,
 	[SYS_getlev]  sys_getlev,
+	[SYS_thread_create]   sys_thread_create,
+	[SYS_thread_exit]   sys_thread_exit,
+	[SYS_thread_join]   sys_thread_join,
 //    [SYS_set_cpu_share] sys_set_cpu_share,
     };
 	

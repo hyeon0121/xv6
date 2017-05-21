@@ -557,7 +557,6 @@ thread_exit(void *retval)
 {
     struct proc* p;
     int fd;
-
     if(proc == initproc)
         panic("init exiting");
     for(fd=0;fd < NOFILE; fd++){
@@ -590,6 +589,7 @@ thread_exit(void *retval)
     proc->state = ZOMBIE;
     sched();
     panic("zombie exit");
+    //thread_join()
 }
 int
 thread_join(thread_t thread, void **retval)
@@ -625,4 +625,5 @@ thread_join(thread_t thread, void **retval)
         sleep(proc, &ptable.lock);
         *(int*)retval = proc->stack;
     }
+    return 0;
 }

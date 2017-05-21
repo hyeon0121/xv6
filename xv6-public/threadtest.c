@@ -28,10 +28,10 @@ int (*testfunc[NTEST])(void) = {
 };
 char *testname[NTEST] = {
   "racingtest",
-  "basictest",
-  "jointest1",
-  "jointest2",
-  "stresstest",
+  //"basictest",
+  // "jointest1",
+  //"jointest2",
+  //"stresstest",
 };
 
 int
