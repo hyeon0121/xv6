@@ -13,8 +13,7 @@ struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
-
-extern int count;
+//extern int count;
 void
 tvinit(void)
 {
@@ -61,7 +60,7 @@ trap(struct trapframe *tf)
     if(cpunum() == 0){
       acquire(&tickslock);
       ticks++;
-      count++;
+      //count++;
       wakeup(&ticks);
       release(&tickslock);
     }
@@ -122,8 +121,10 @@ trap(struct trapframe *tf)
             proc->currTicks == 0;
       }
       else(proc->currTicks < mlfqticks2[proc->priority])*/
-      proc->currTicks++;
+     // proc->currTicks++;
       //proc->ticket++;
+      stride_implement();
+      mlfq_implement();
       yield();
   }
   // Check if the process has been killed since we yielded

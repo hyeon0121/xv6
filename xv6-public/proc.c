@@ -7,7 +7,10 @@
 #include "proc.h"
 #include "spinlock.h"
 
+#define LARGE_NUM 10000
+
 typedef unsigned int thread_t;
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -15,14 +18,219 @@ struct {
 
 static struct proc *initproc;
 
+//my stride
+struct stride {
+    struct proc* proc;
+    int ticket;
+    int stride;
+    int pass;
+};
+struct stride stride_t[NPROC];
+struct stride isMLFQ;
+struct stride* next_stride = &isMLFQ;
+
+//my thread
+int nexttid = 1;
+
+//my mlfq 
+struct proc *queue[3][NPROC];
+int front[3] = {0,0,0};
+int limit[3] = {5,10,20};
+int count = 0;
+
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
-//struct proc *ssp;
-//int Largenum = 10000;
-int count = 0;
+
+//Modified proj2 MLFQ
+int Enqueue(struct proc* p, int prio){
+    int val = 0;
+    int isfront = front[prio];
+    val = isfront;
+    do{
+        if(queue[prio][val] == 0)
+            break; 
+        val = (val + 1)%NPROC;
+      //  if(val == isfront) break;
+    }while(val != isfront);
+
+    queue[prio][val] = p;
+    return 1;
+}
+int Dequeue(struct proc* p){
+    int i;
+    for(i=0;i<NPROC; i++){
+        if(queue[p->priority][i]->pid == p->pid){
+            queue[p->priority][i] = 0;
+            return 1;
+        }
+    }
+    return 0;
+}
+int priority_boost(){
+    int i, j;
+    struct proc* p;
+
+    for(i=0;i<3;i++){
+        for(j=0;j<NPROC;j++){
+            queue[i][j] = 0;
+        }
+        front[i] = 0;
+    }
+
+    acquire(&ptable.lock);
+    
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state != UNUSED && p->pstride == &isMLFQ){
+            p->priority = 0;
+            p->currtick = 0;
+            Enqueue(p,0);
+        }
+    
+    }
+    release(&ptable.lock);
+
+    return 1;
+}
+struct proc* select_proc(){
+    int val ,i;
+    struct proc* p;
+    for(i=0;i<3;i++){
+        val = front[i];
+        do{
+           p=queue[i][front[i]];
+           if(p != 0){
+              if(p->state == RUNNABLE)
+                    return p;
+           }
+                
+           front[i] = (front[i]+1) % NPROC;
+           //if(tmp == front[i]) break;
+        
+        }while(val!=front[i]);
+    }
+    return 0;
+}
+void mlfq_implement(void){
+    if(proc->pstride != &isMLFQ)
+        return;
+    proc->currtick++;
+    count++;
+    if(count >= 100){
+        count = 0;
+        priority_boost();
+        return;
+    }
+
+    switch (proc->priority){
+        case 0:
+            if(proc->currtick >= limit[proc->priority]){
+                Dequeue(proc);
+                front[proc->priority] = (front[proc->priority]+1) % NPROC;
+                Enqueue(proc,++(proc->priority));
+                proc->currtick = 0; //initial tick
+            }
+            break;
+        case 1:
+            if(proc->currtick >= limit[proc->priority]){
+                Dequeue(proc);
+                front[proc->priority] = (front[proc->priority]+1) % NPROC;
+                Enqueue(proc,++(proc->priority));
+                proc->currtick = 0; //initial tick
+            }
+            break;
+        case 2:
+            if(proc->currtick >= limit[proc->priority]){
+                proc->currtick = 0; //initial tick
+                front[proc->priority] = (front[proc->priority]+1) % NPROC;
+            }
+            break;
+    }
+}
+//my stride code
+int set_cpu_share(int n) {
+    int total_tick = 0;
+    struct stride *s;
+    if(n <= 0) return -1;
+    
+    for(s = stride_t; s < &stride_t[NPROC]; s++ ){
+        if(s->proc != 0)
+            total_tick = total_tick +  s->ticket;
+    }
+    total_tick = total_tick + n;
+    
+    if(total_tick > 80) return -1;
+    for(s = stride_t; s < &stride_t[NPROC]; s++){
+        if(s->proc != 0){
+            s->pass = 0;
+        }
+    }
+    for(s = stride_t; s < &stride_t[NPROC]; s++){
+        if(s->proc == 0){
+            break;
+        }
+    }
+
+    s->pass = 0;
+    s->ticket = n;
+    s->stride = LARGE_NUM / n;
+    s->proc = proc;
+
+    proc->pstride = s;
+
+    isMLFQ.pass = 0;
+    isMLFQ.ticket = 100 - total_tick;
+    isMLFQ.stride = LARGE_NUM / isMLFQ.ticket;
+    isMLFQ.proc = 0;
+
+    Dequeue(proc);
+    return n;
+}
+struct stride* select_min_stride(){
+    struct stride *s;
+    struct stride *min;
+
+    min = &isMLFQ;
+    for(s = stride_t; s < &stride_t[NPROC]; s++){
+        if(s->proc != 0)
+            if(min->pass > s->pass){
+                min = s;
+            }
+    } 
+    return min;
+}
+int Destride(struct proc* p){
+    struct stride *s;
+    
+    for(s = stride_t; s < &stride_t[NPROC]; s++){
+        if(s->proc != 0)
+            if(s->proc->pid == p->pid){
+                s->proc = 0;
+                p->pstride = 0;
+                return -1;
+            }
+    }
+    return 0;
+}
+void stride_implement(){
+    struct stride *s;
+
+    proc->pstride->pass += proc->pstride->stride;
+    next_stride = select_min_stride();
+
+    if(proc->pstride->pass > LARGE_NUM){
+        if(proc->pstride != next_stride){
+            isMLFQ.pass = 0;
+            for(s = stride_t; s < &stride_t[NPROC]; s++){
+                if(s->proc != 0)
+                    s->pass = 0;
+            }
+        }
+    }
+    return;
+}
 void
 pinit(void)
 {
@@ -50,8 +258,8 @@ release(&ptable.lock);
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
-  p->priority = 0;
-  p->currTicks = 0;
+  //p->priority = 0;
+  //p->tick = 0;
   
   release(&ptable.lock);
 
@@ -75,6 +283,15 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  
+  //initial variable
+  p->currtick = 0;
+  p->priority = 0;
+  p->pstride = &isMLFQ;
+  Enqueue(p,0);
+  p->isthread = 0;
+  p->thread_id = 0;
+  p->retval = 0;
 
   return p;
 }
@@ -265,7 +482,10 @@ void
 scheduler(void)
 {
   struct proc *p;
-	int limit[] = {5,10,20};
+  //struct proc *tmp;
+  struct proc *m = ptable.proc;
+  //int i, tmp;
+
 
   for(;;){
     // Enable interrupts on this processor.
@@ -273,48 +493,60 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-	int prio;
-	for(prio = 0; prio < 3; prio++) {
+	//int prio;
+	//for(prio = 0; prio < 3; prio++) {
 		for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-			
 			if(p->state != RUNNABLE)
                 continue;
-			if(p->priority == prio) {
-                proc = p;
-                switchuvm(p);
-                p->state = RUNNING;
-                swtch(&cpu->scheduler, proc->context);
-                switchkvm();
+            if(select_proc() != 0){
+                p = select_proc();
+            }
+            /*for(i=0;i<3;i++){
+                tmp = front[i];
+                do{
+                    p1=queue[i][front[i]];
+                    if(p1 != 0){
+                        if(p1->state == RUNNABLE)
+                            p = p1;
+                    }
                 
-                if(count >= 100) { 
-					if(p->priority !=0){
-                        p->priority = 0;
-                        p->currTicks = 0;
-                        }
-                    count = 0;
-                    }	
+                    front[i] = (front[i]+1) % NPROC;
+                }while(tmp!=front[i]);
+             }*/
 
-				if(p->currTicks >= limit[prio]) {
-					if(p->priority <2) {
-						p->priority++;
-					}
-                    p->currTicks = 0;
-				}
-                proc = 0;
-            }				
+            if(next_stride->proc != 0){
+                if(next_stride->proc->state == RUNNABLE)
+                    p = next_stride->proc;
+            }
+
+            for(; m < &ptable.proc[NPROC]; m++){
+                if(m > &ptable.proc[NPROC-1])
+                    m = ptable.proc;
+                if((m->parent == p && m->thread_id != 0) || m == p)
+                {
+                    p = m;
+                    break;
+                }
+            }
+
+            proc = p;
+            switchuvm(p);
+            p->state = RUNNING;
+            swtch(&cpu->scheduler, proc->context);
+            switchkvm();
+                
+            proc = 0;
         }
-	}
+        release(&ptable.lock);
+    }
+}
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       
-    release(&ptable.lock);
-
-  }
-}
-
+    
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state.
 void
@@ -491,22 +723,27 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
     int i;
     struct proc *np;
   
-    uint  sp, ustack[3+MAXARG+1];
- 
+    //uint sp; 
+    uint ustack[3];
+
     // Allocate process.
     if((np = allocproc()) == 0){
         cprintf("Cannot allocate!\n");
         return -1;
     }
-
-    *thread = np->pid;
+    Dequeue(np);
+    np->pstride = 0;
+    np->isthread = 1;
+    np->pgdir = proc->pgdir;
+    /*
+    np->thread_id = nexttid++;
+    *thread = np->thread_id;
     np->pgdir = proc->pgdir;
     np->sz = proc->sz;
     np->parent = proc;
     np->isthread = 1;
     *np->tf = *proc->tf;
 
-    // Clear %eax so that fork returns 0 in success.
     np->tf->eax = 0;
     np->tf->eip = (uint)start_routine;   
 
@@ -553,13 +790,57 @@ thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg)
     np->state = RUNNABLE;
     release(&ptable.lock);
    
+    return 0;*/
+    *np->tf = *proc->tf;
+    np->parent = proc;
+
+    // Clear %eax
+    np->tf->eax = 0;
+    for(i=0;i<NOFILE; i++)
+        if(proc->ofile[i])
+            np->ofile[i] = filedup(proc->ofile[i]);
+    np->cwd = idup(proc->cwd);
+
+    safestrcpy(np->name, proc->name, sizeof(proc->name));
+
+    if(growproc(PGSIZE) == -1){
+        return -1;
+    }
+
+    np->tf->esp = proc->sz;
+    np->sz = proc->sz;
+
+    np->tf->eip = (uint)start_routine;
+
+    ustack[0] = 0xffffffff;
+    ustack[1] = (uint)arg;
+    ustack[2] = 0;
+
+    np->tf->esp -= 12;
+
+    if(copyout(np->pgdir, np->tf->esp, ustack, 12) < 0){
+        return -1;
+    }
+
+    np->thread_id = nexttid++;
+    *thread = np->thread_id;
+
+    acquire(&ptable.lock);
+    np->state = RUNNABLE;
+    release(&ptable.lock);
+    
     return 0;
+
+
 }
 void
 thread_exit(void *retval)
 {
+    
     struct proc* p;
     int fd;
+    proc->retval = retval;
+    
     if(proc == initproc)
         panic("init exiting");
     for(fd=0;fd < NOFILE; fd++){
@@ -580,53 +861,62 @@ thread_exit(void *retval)
     for(p = ptable.proc; p < &ptable.proc[NPROC];p++){
         if(p->parent == proc){
             p->parent = initproc;
-            if(p->isthread == 1){
+            /*if(p->isthread == 1){
                 p->state = UNUSED;
                 kfree(p->kstack);
                 p->kstack = 0;
-            }
+            }*/
             if(p->state == ZOMBIE)
                 wakeup1(initproc);
         }
     }
     proc->state = ZOMBIE;
+    
+    if(proc->pstride == &isMLFQ ){
+        Dequeue(proc);
+    }
+    else{
+        Destride(proc);
+    }
     sched();
     panic("zombie exit");
-    //thread_join()
 }
 int
 thread_join(thread_t thread, void **retval)
 {
     struct proc *p;
-    int havekids, pid;
+    int havekids = 0;
 
     acquire(&ptable.lock);
-    for(;;){
-        havekids = 0;
+    
         for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-            if(p->parent != proc || p->isthread != 1)
-                continue;
-            havekids = 1;
-            if(p->state == ZOMBIE){
-                pid = p->pid;
-                kfree(p->kstack);
-                p->kstack = 0;
-                p->state = UNUSED;
-                p->pid = 0;
-                p->parent = 0;
-                p->name[0] = 0;
-                p->killed = 0;
-                release(&ptable.lock);
-                return pid;
+            if(p->thread_id == thread && p->isthread == 1){
+                havekids = 1;
+                break;
             }
         }
-
-        if(!havekids || proc->killed){
-            release(&ptable.lock);
-            return -1;
+        if( havekids == 0){
+            cprintf("No have thread\n");
         }
-        sleep(proc, &ptable.lock);
-        *(int*)retval = proc->stack;
-    }
-    return 0;
-}
+
+        while(p->state != ZOMBIE){
+            sleep(proc, &ptable.lock);
+        }
+     
+        *retval = p->retval;
+        
+        deallocuvm(p->pgdir, p->sz, p->sz - PGSIZE);
+        
+        kfree(p->kstack);
+        p->kstack = 0;
+        p->state = UNUSED;
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->thread_id = 0;
+        p->retval = 0;
+        release(&ptable.lock);
+                
+        return 0;
+} 

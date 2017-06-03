@@ -99,12 +99,15 @@ sys_getlev(void)
 {
     return proc->priority;
 }
-/*int
+int
 sys_set_cpu_share(void)
 {
-    proc->
-    return 0;
-}*/
+    int n;
+    if(argint(0, &n) < 0)
+        return -1;
+
+    return set_cpu_share(n);
+}
 int 
 sys_yield(void)
 {
@@ -122,25 +125,26 @@ sys_thread_create(void)
         return -1;
     if(argint(2, &arg) < 0)
         return -1;
-    return thread_create((uint*)thread, (void*)start_routine,(void*)arg);
+    return thread_create((thread_t*)thread, (void*)start_routine,(void*)arg);
 }
 int
 sys_thread_exit(void)
 {
-    void *retval;
-    if(argptr(0,(void*)&retval,sizeof(retval)) < 0)
+    int retval;
+    if(argint(0, &retval) < 0)
         return -1;
-    thread_exit(&retval);
+
+    thread_exit((void*)retval);
     return 0;
 }
 int 
 sys_thread_join(void)
 {
     int thread;
-    void** retval;
+    int retval;
     if(argint(0, &thread) < 0)
         return -1;
-    if(argptr(1, (void*)&retval,sizeof(void*)) < 0)
+    if(argint(1, &retval) < 0)
         return -1;
-    return thread_join(thread, retval);
+    return thread_join((thread_t)thread, (void**)retval);
 }

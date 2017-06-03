@@ -14,11 +14,11 @@
 // Name of child test program that tests MLFQ scheduler
 #define NAME_CHILD_MLFQ     "test_mlfq"
 
-char *child_argv[2][3] = {
+char *child_argv[CNT_CHILD][3] = {
   // Process scheduled by Stride scheduler, use 10% of CPU resources
-//  {NAME_CHILD_STRIDE, "10", 0},
+  {NAME_CHILD_STRIDE, "10", 0},
   // Process scheduled by Stride scheduler, use 40% of CPU resources
- // {NAME_CHILD_STRIDE, "40", 0},
+  {NAME_CHILD_STRIDE, "40", 0},
   // Process scheduled by MLFQ scheduler, does not yield() itself
   {NAME_CHILD_MLFQ, "0", 0},
   // Process scheduled by MLFQ scheduler, frequently yield()
@@ -31,7 +31,7 @@ main(int argc, char *argv[])
   int pid;
   int i;
 
-  for (i = 0; i < 2; i++) {
+  for (i = 0; i < CNT_CHILD; i++) {
     pid = fork();
     if (pid > 0) {
       // parent
@@ -47,7 +47,7 @@ main(int argc, char *argv[])
     }
   }
   
-  for (i = 0; i < 2; i++) {
+  for (i = 0; i < CNT_CHILD; i++) {
     wait();
   }
 

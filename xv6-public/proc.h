@@ -73,14 +73,17 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int priority;                // Current priority                             
-  int currTicks;
-  int ticket;
+  int currtick;
+  /*int ticket;
   int pass;
   int stride;
-  int limitpass;
+  int limitpass;*/
   int isMLFQ;
+  struct stride* pstride;
   int isthread;
-  int stack;
+  thread_t thread_id;
+  void* retval;
+
 };
 
 // Process memory is laid out contiguously, low addresses first:
